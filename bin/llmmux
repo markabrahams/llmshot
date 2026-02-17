@@ -7,11 +7,29 @@ set -euo pipefail
 #set -x
 
 # ---------------------------
+# Error helper: stderr + exit 1
+# Usage: die "message" ["detail"] ["url"]
+# ---------------------------
+die() {
+    local msg="$1"
+    local detail="${2:-}"
+    local url="${3:-}"
+    echo "$msg" >&2
+    [[ -n "$detail" ]] && echo "  $detail" >&2
+    [[ -n "$url" ]] && echo "  See: $url" >&2
+    exit 1
+}
+
+# ---------------------------
 # Usage function
 # ---------------------------
 usage() {
     cat <<EOF
-Usage: $0 -p <provider> [-m <model>] [-t <text>] [-f <file>] [-e <env_file>] [-u <url>]
+Usage: $0 [credit] -p <provider> [-m <model>] [-t <text>] [-f <file>] [-e <env_file>] [-u <url>]
+Subcommands:
+  credit            Show credit/usage for the given provider's API key (requires -p)
+
+Options:
   -p, --provider   Provider: openai, google, anthropic, ollama
   -m, --model      Override model from config (or use provider default if unset)
   -t, --text       Prompt text (takes precedence over -f and stdin)
@@ -22,15 +40,27 @@ EOF
     exit 1
 }
 
+usage_credit() {
+    echo "Usage: $0 credit -p <provider> [-e <env_file>]"
+    echo "  Show credit/usage for the given provider's API key."
+    exit 1
+}
+
 # ---------------------------
 # Parse args
 # ---------------------------
+SUBCOMMAND=""
 PROVIDER=""
 MODEL=""
 PROMPT_TEXT=""
 PROMPT_FILE=""
 ENV_FILE=""
 OLLAMA_URL=""
+
+if [[ $# -gt 0 && "$1" == "credit" ]]; then
+    SUBCOMMAND="credit"
+    shift
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -65,6 +95,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$PROVIDER" ]]; then
+    [[ "$SUBCOMMAND" == "credit" ]] && usage_credit
     usage
 fi
 
@@ -73,8 +104,7 @@ fi
 # ---------------------------
 if [[ -n "$ENV_FILE" ]]; then
     if [[ ! -f "$ENV_FILE" ]]; then
-        echo "Error: env file not found: $ENV_FILE"
-        exit 1
+        die "Env file not found: $ENV_FILE"
     fi
     CONFIG_FILE="$ENV_FILE"
 #elif [[ -f ".env" ]]; then
@@ -82,8 +112,7 @@ if [[ -n "$ENV_FILE" ]]; then
 elif [[ -f "$HOME/.config/llmmux/llmmux.conf" ]]; then
     CONFIG_FILE="$HOME/.config/llmmux/llmmux.conf"
 else
-    echo "Error: no environment file found. Use -e/--env <file>, or create .env or $HOME/.config/llmmux/llmmux.conf"
-    exit 1
+    die "No environment file found." "Use -e/--env <file>, or create $HOME/.config/llmmux/llmmux.conf"
 fi
 
 set -a
@@ -91,6 +120,75 @@ source "$CONFIG_FILE"
 set +a
 
 PROVIDER_LOWER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
+
+# ---------------------------
+# Subcommand: credit
+# ---------------------------
+if [[ "$SUBCOMMAND" == "credit" ]]; then
+    case "$PROVIDER_LOWER" in
+        openai)
+            if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+                die "OPENAI_API_KEY not set in config."
+            fi
+            END_TS=$(date +%s)
+            START_TS=$((END_TS - 30*86400))
+            RESP=$(curl -s "https://api.openai.com/v1/organization/costs?start_time=$START_TS&end_time=$END_TS&bucket_width=1d&limit=31" \
+                -H "Authorization: Bearer $OPENAI_API_KEY") || true
+            if echo "$RESP" | jq -e '.error' &>/dev/null; then
+                MSG=$(echo "$RESP" | jq -r 'if (.error | type) == "string" then .error else .error.message // (.error | tostring) end')
+                if echo "$MSG" | grep -qi "api.usage.read\|insufficient permissions"; then
+                    die "OpenAI usage/costs require an API key with the api.usage.read scope." \
+                        "Check your organization role or use a key that has usage read permission."
+                else
+                    die "OpenAI API error: $MSG"
+                fi
+            fi
+            TOTAL=$(echo "$RESP" | jq -r '[.data[]?.result[]? | select(.amount.value != null) | .amount.value] | add // 0')
+            echo "OpenAI (last 30 days): \$$(printf '%.2f' "$TOTAL") USD cost"
+            ;;
+        anthropic)
+            if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+                die "ANTHROPIC_API_KEY not set in config."
+            fi
+            END_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            PAST_TS=$(($(date +%s) - 30*86400))
+            START_AT=$(date -u -d "@$PAST_TS" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$PAST_TS" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+            [[ -z "$START_AT" ]] && START_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            RESP=$(curl -s "https://api.anthropic.com/v1/organizations/cost_report?starting_at=${START_AT}&ending_at=${END_AT}" \
+                -H "anthropic-version: 2023-06-01" \
+                -H "x-api-key: $ANTHROPIC_API_KEY") || true
+            if echo "$RESP" | jq -e '.error' &>/dev/null; then
+                MSG=$(echo "$RESP" | jq -r '.error.message // (if (.error | type) == "string" then .error else (.error | tostring) end)')
+                if echo "$MSG" | grep -qi "admin\|organization"; then
+                    die "Anthropic usage requires an Admin API key (sk-ant-admin...)." "" \
+                        "https://docs.anthropic.com/en/api/usage-cost-api"
+                elif echo "$MSG" | grep -qi "invalid.*api-key\|authentication"; then
+                    die "Invalid or unauthorized API key. For usage/cost data, an Admin API key (sk-ant-admin...) is required." "" \
+                        "https://docs.anthropic.com/en/api/usage-cost-api"
+                else
+                    die "Anthropic API error: $MSG"
+                fi
+            fi
+            TOTAL_CENTS=$(echo "$RESP" | jq -r '[.. | .amount? // empty | select(. != null) | tonumber] | add // 0')
+            TOTAL_DOLLARS=$(echo "$TOTAL_CENTS" | awk '{printf "%.2f", $1/100}')
+            echo "Anthropic (last 30 days): \$$TOTAL_DOLLARS USD cost"
+            ;;
+        google)
+            if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
+                die "GOOGLE_API_KEY not set in config."
+            fi
+            die "Google (Gemini): Usage and billing are not available via API key." "" \
+                "https://aistudio.google.com/usage"
+            ;;
+        ollama)
+            echo "Ollama: N/A (local inference; no API key or credit limit)."
+            ;;
+        *)
+            die "Unknown provider: $PROVIDER"
+            ;;
+    esac
+    exit 0
+fi
 
 # Override model if given on command line
 if [[ -n "$MODEL" ]]; then
@@ -120,8 +218,7 @@ if [[ -n "$PROMPT_TEXT" ]]; then
     PROMPT="$PROMPT_TEXT"
 elif [[ -n "$PROMPT_FILE" ]]; then
     if [[ ! -f "$PROMPT_FILE" ]]; then
-        echo "Error: file not found: $PROMPT_FILE"
-        exit 1
+        die "File not found: $PROMPT_FILE"
     fi
     PROMPT=$(<"$PROMPT_FILE")
 else
@@ -177,7 +274,6 @@ case "$PROVIDER_LOWER" in
             }" | jq -r '.message.content'
         ;;
     *)
-        echo "Unknown provider: $PROVIDER"
-        exit 1
+        die "Unknown provider: $PROVIDER"
         ;;
 esac
