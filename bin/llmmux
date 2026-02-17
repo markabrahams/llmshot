@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# llmmux - Multi-provider LLM CLI
+# Copyright (c) 2026 Mark Abrahams
+# Released under the MIT License.
+
+set -euo pipefail
+#set -x
+
+# ---------------------------
+# Usage function
+# ---------------------------
+usage() {
+    cat <<EOF
+Usage: $0 -p <provider> [-m <model>] [-t <text>] [-f <file>] [-e <env_file>] [-u <url>]
+  -p, --provider   Provider: openai, google, anthropic, ollama
+  -m, --model      Override model from config (or use provider default if unset)
+  -t, --text       Prompt text (takes precedence over -f and stdin)
+  -f, --file       Prompt file (used if -t not given; else stdin)
+  -e, --env        Environment/config file (optional; see below for default lookup)
+  -u, --url        URL for ollama provider (default: http://localhost:11434)
+EOF
+    exit 1
+}
+
+# ---------------------------
+# Parse args
+# ---------------------------
+PROVIDER=""
+MODEL=""
+PROMPT_TEXT=""
+PROMPT_FILE=""
+ENV_FILE=""
+OLLAMA_URL=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -p|--provider)
+            PROVIDER="$2"
+            shift 2
+            ;;
+        -m|--model)
+            MODEL="$2"
+            shift 2
+            ;;
+        -t|--text)
+            PROMPT_TEXT="$2"
+            shift 2
+            ;;
+        -f|--file)
+            PROMPT_FILE="$2"
+            shift 2
+            ;;
+        -e|--env)
+            ENV_FILE="$2"
+            shift 2
+            ;;
+        -u|--url)
+            OLLAMA_URL="$2"
+            shift 2
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+
+if [[ -z "$PROVIDER" ]]; then
+    usage
+fi
+
+# ---------------------------
+# Load config: (1) -e/--env, (2) .env, (3) ~/.config/llmmux/llmmux.conf
+# ---------------------------
+if [[ -n "$ENV_FILE" ]]; then
+    if [[ ! -f "$ENV_FILE" ]]; then
+        echo "Error: env file not found: $ENV_FILE"
+        exit 1
+    fi
+    CONFIG_FILE="$ENV_FILE"
+#elif [[ -f ".env" ]]; then
+#    CONFIG_FILE=".env"
+elif [[ -f "$HOME/.config/llmmux/llmmux.conf" ]]; then
+    CONFIG_FILE="$HOME/.config/llmmux/llmmux.conf"
+else
+    echo "Error: no environment file found. Use -e/--env <file>, or create .env or $HOME/.config/llmmux/llmmux.conf"
+    exit 1
+fi
+
+set -a
+source "$CONFIG_FILE"
+set +a
+
+PROVIDER_LOWER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
+
+# Override model if given on command line
+if [[ -n "$MODEL" ]]; then
+    case "$PROVIDER_LOWER" in
+        openai) OPENAI_MODEL="$MODEL" ;;
+        google) GOOGLE_MODEL="$MODEL" ;;
+        anthropic) ANTHROPIC_MODEL="$MODEL" ;;
+        ollama) OLLAMA_MODEL="$MODEL" ;;
+    esac
+fi
+
+# Apply default model per provider if still unset (env may not define it)
+case "$PROVIDER_LOWER" in
+    openai)   : "${OPENAI_MODEL:=gpt-5}" ;;
+    google)   : "${GOOGLE_MODEL:=gemini-2.5-flash}" ;;
+    anthropic) : "${ANTHROPIC_MODEL:=claude-sonnet-4-5}" ;;
+    ollama)
+        : "${OLLAMA_MODEL:=llama3.1}"
+        : "${OLLAMA_URL:=http://localhost:11434}"
+        ;;
+esac
+
+# ---------------------------
+# Read prompt: (1) -t/--text, (2) -f/--file, (3) stdin
+# ---------------------------
+if [[ -n "$PROMPT_TEXT" ]]; then
+    PROMPT="$PROMPT_TEXT"
+elif [[ -n "$PROMPT_FILE" ]]; then
+    if [[ ! -f "$PROMPT_FILE" ]]; then
+        echo "Error: file not found: $PROMPT_FILE"
+        exit 1
+    fi
+    PROMPT=$(<"$PROMPT_FILE")
+else
+    PROMPT=$(cat)
+fi
+
+# Escape for JSON safely
+JSON_PROMPT=$(jq -n --arg text "$PROMPT" '$text')
+
+# ---------------------------
+# Call provider API
+# ---------------------------
+case "$PROVIDER_LOWER" in
+    openai)
+        curl -s https://api.openai.com/v1/chat/completions \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"model\": \"$OPENAI_MODEL\",
+                \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]
+            }" | jq -r '.choices[0].message.content'
+        ;;
+    anthropic)
+        curl -s https://api.anthropic.com/v1/chat/completions \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "Anthropic-Version: 2023-06-01" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"model\": \"$ANTHROPIC_MODEL\",
+                \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]
+            }" | jq -r '.choices[0].message.content'
+        ;;
+    google)
+        # Google expects contents.parts[].text
+        curl -s "https://generativelanguage.googleapis.com/v1beta/models/$GOOGLE_MODEL:generateContent" \
+            -H "x-goog-api-key: $GOOGLE_API_KEY" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "{
+                \"contents\": [
+                    {\"parts\": [{\"text\": $JSON_PROMPT}]}
+                ],
+            }" | jq -r '.candidates[0].content.parts[0].text'
+        ;;
+    ollama)
+        curl -s "${OLLAMA_URL%/}/api/chat" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "{
+                \"model\": \"$OLLAMA_MODEL\",
+                \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}],
+                \"stream\": false
+            }" | jq -r '.message.content'
+        ;;
+    *)
+        echo "Unknown provider: $PROVIDER"
+        exit 1
+        ;;
+esac
