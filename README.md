@@ -260,3 +260,5 @@ This tool can interact with external AI providers such as OpenAI, Google,
 and Anthropic. This project is not affiliated with or endorsed by any
 of these providers. Users are responsible for complying with the respective
 API terms of service.
+
+![ShellCheck](https://github.com/YOURNAME/llmmux/actions/workflows/shellcheck.yml/badge.svg)

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # llmmux - Multi-provider LLM CLI
 # Copyright (c) 2026 Mark Abrahams
 # Released under the MIT License.
@@ -116,6 +117,7 @@ else
 fi
 
 set -a
+# shellcheck disable=SC1090
 source "$CONFIG_FILE"
 set +a
 
