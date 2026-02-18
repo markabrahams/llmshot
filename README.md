@@ -1,4 +1,4 @@
-# llmmux
+# llmshot
 
 A small **bash** CLI that talks to multiple LLM providers from the command line. One script, one interface—switch providers with a flag.
 
@@ -6,7 +6,7 @@ A small **bash** CLI that talks to multiple LLM providers from the command line.
 
 - **Multiple providers**: OpenAI, Google (Gemini), Anthropic (Claude), and Ollama (local).
 - **Flexible prompt input**: Inline text (`-t`), a file (`-f`), or stdin.
-- **Config file**: API keys and default models in `~/.config/llmmux/llmmux.conf` or via `-e`.
+- **Config file**: API keys and default models in `~/.config/llmshot/llmshot.conf` or via `-e`.
 - **Model override**: Use `-m` to override the default model for the chosen provider.
 - **No extra runtime**: Uses only `bash`, `curl`, and `jq`.
 
@@ -88,7 +88,7 @@ Git for Windows includes Bash, curl, and often basic tools. Install **jq** separ
 - Download from [jqlang/jq](https://github.com/jqlang/jq/releases) (e.g. `jq-win64.exe`), rename to `jq.exe`, and put it in your `PATH`, or  
 - If you have Chocolatey: `choco install jq`
 
-Then run `llmmux` from Git Bash.
+Then run `llmshot` from Git Bash.
 
 **Option C: MSYS2 / Cygwin**  
 Install the `curl` and `jq` packages in your MSYS2 or Cygwin environment and run the script from that shell.
@@ -97,26 +97,52 @@ Install the `curl` and `jq` packages in your MSYS2 or Cygwin environment and run
 
 ## Installation
 
-1. Clone or download this repo (or copy the `llmmux` script).
+### One-command install (Linux / macOS / WSL)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/markabrahams/llmshot/main/install/install.sh | bash
+```
+
+This installs `llmshot` to `~/.local/bin` (or `/usr/local/bin` if run as root). To use a custom directory:
+
+```bash
+curl -fsSL .../install/install.sh | bash -s -- -d /usr/local/bin
+# or
+INSTALL_DIR=/usr/local/bin curl -fsSL .../install/install.sh | bash
+```
+
+Ensure `~/.local/bin` is in your `PATH` (e.g. add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc` or `~/.profile`).
+
+### Homebrew (macOS)
+
+If you have a [Homebrew tap](https://docs.brew.sh/Taps) that includes the formula (see `install/llmshot.rb` template in this repo):
+
+```bash
+brew install markabrahams/llmshot/llmshot
+```
+
+### Manual
+
+1. Clone or download this repo (or copy the `llmshot` script from `bin/`).
 2. Make the script executable:
 
    ```bash
-   chmod +x llmmux
+   chmod +x bin/llmshot
    ```
 
-3. (Optional) Put it on your PATH, e.g.:
+3. Put it on your PATH, e.g.:
 
    ```bash
-   sudo cp llmmux /usr/local/bin/
+   sudo cp bin/llmshot /usr/local/bin/
    # or
-   mkdir -p ~/.local/bin && cp llmmux ~/.local/bin/ && export PATH="$HOME/.local/bin:$PATH"
+   mkdir -p ~/.local/bin && cp bin/llmshot ~/.local/bin/ && export PATH="$HOME/.local/bin:$PATH"
    ```
 
 ## Configuration
 
-Create a config file so llmmux can find your API keys and defaults.
+Create a config file so llmshot can find your API keys and defaults.
 
-**Location (by default):** `~/.config/llmmux/llmmux.conf`
+**Location (by default):** `~/.config/llmshot/llmshot.conf`
 
 **Override:** use `-e /path/to/file` to point to another env/config file.
 
@@ -147,13 +173,13 @@ Only set the keys and variables for the providers you use. The script sources th
 ### Securing the config file
 
 ```bash
-chmod 600 ~/.config/llmmux/llmmux.conf
+chmod 600 ~/.config/llmshot/llmshot.conf
 ```
 
 ## Usage
 
 ```text
-Usage: llmmux -p <provider> [-m <model>] [-t <text>] [-f <file>] [-e <env_file>] [-u <url>]
+Usage: llmshot -p <provider> [-m <model>] [-t <text>] [-f <file>] [-e <env_file>] [-u <url>]
   -p, --provider   Provider: openai, google, anthropic, ollama
   -m, --model      Override model from config (or use provider default if unset)
   -t, --text       Prompt text (takes precedence over -f and stdin)
@@ -167,37 +193,37 @@ Usage: llmmux -p <provider> [-m <model>] [-t <text>] [-f <file>] [-e <env_file>]
 **Inline prompt (OpenAI):**
 
 ```bash
-./llmmux -p openai -t "Explain recursion in one sentence."
+./llmshot -p openai -t "Explain recursion in one sentence."
 ```
 
 **Prompt from file (Anthropic):**
 
 ```bash
-./llmmux -p anthropic -f ./prompt.txt
+./llmshot -p anthropic -f ./prompt.txt
 ```
 
 **Stdin (e.g. pipe):**
 
 ```bash
-echo "Summarize the following: ..." | ./llmmux -p google
+echo "Summarize the following: ..." | ./llmshot -p google
 ```
 
 **Ollama with custom URL and model:**
 
 ```bash
-./llmmux -p ollama -u http://192.168.1.10:11434 -m llama3.2 -t "Hello"
+./llmshot -p ollama -u http://192.168.1.10:11434 -m llama3.2 -t "Hello"
 ```
 
 **Override model for one call:**
 
 ```bash
-./llmmux -p openai -m gpt-4o-mini -t "Short joke about shells"
+./llmshot -p openai -m gpt-4o-mini -t "Short joke about shells"
 ```
 
 **Use a specific config file:**
 
 ```bash
-./llmmux -p openai -e ~/work/llmmux.env -t "Hello"
+./llmshot -p openai -e ~/work/llmshot.env -t "Hello"
 ```
 
 ## Default models
@@ -216,7 +242,7 @@ If you don’t set a model in config or with `-m`, the script uses:
 ## Troubleshooting
 
 - **"no environment file found"**  
-  Create `~/.config/llmmux/llmmux.conf` (or use `-e <file>`) with at least the API key for the provider you’re using.
+  Create `~/.config/llmshot/llmshot.conf` (or use `-e <file>`) with at least the API key for the provider you’re using.
 
 - **"Unknown provider"**  
   Use one of: `openai`, `google`, `anthropic`, `ollama` (case-insensitive).
@@ -261,4 +287,4 @@ and Anthropic. This project is not affiliated with or endorsed by any
 of these providers. Users are responsible for complying with the respective
 API terms of service.
 
-![ShellCheck](https://github.com/YOURNAME/llmmux/actions/workflows/shellcheck.yml/badge.svg)
+![ShellCheck](https://github.com/YOURNAME/llmshot/actions/workflows/shellcheck.yml/badge.svg)

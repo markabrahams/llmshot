@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# llmmux - Multi-provider LLM CLI
+# llmshot - Multi-provider LLM CLI
 # Copyright (c) 2026 Mark Abrahams
 # Released under the MIT License.
 
@@ -101,7 +101,7 @@ if [[ -z "$PROVIDER" ]]; then
 fi
 
 # ---------------------------
-# Load config: (1) -e/--env, (2) .env, (3) ~/.config/llmmux/llmmux.conf
+# Load config: (1) -e/--env, (2) .env, (3) ~/.config/llmshot/llmshot.conf
 # ---------------------------
 if [[ -n "$ENV_FILE" ]]; then
     if [[ ! -f "$ENV_FILE" ]]; then
@@ -110,10 +110,10 @@ if [[ -n "$ENV_FILE" ]]; then
     CONFIG_FILE="$ENV_FILE"
 #elif [[ -f ".env" ]]; then
 #    CONFIG_FILE=".env"
-elif [[ -f "$HOME/.config/llmmux/llmmux.conf" ]]; then
-    CONFIG_FILE="$HOME/.config/llmmux/llmmux.conf"
+elif [[ -f "$HOME/.config/llmshot/llmshot.conf" ]]; then
+    CONFIG_FILE="$HOME/.config/llmshot/llmshot.conf"
 else
-    die "No environment file found." "Use -e/--env <file>, or create $HOME/.config/llmmux/llmmux.conf"
+    die "No environment file found." "Use -e/--env <file>, or create $HOME/.config/llmshot/llmshot.conf"
 fi
 
 set -a
