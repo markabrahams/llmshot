@@ -1,6 +1,15 @@
 # llmshot
 
-A small **bash** CLI that talks to multiple LLM providers from the command line. One script, one interface—switch providers with a flag.
+A small **bash** command that talks to multiple LLM providers. One script, one interface. Switch providers with a flag.
+
+## Quick Example
+
+```
+$ llmshot -p openai -t "Give me a clever anagram I can impress my friends with"
+Try this one:
+A decimal point → I'm a dot in place
+$
+```
 
 ## Features
 
@@ -106,16 +115,16 @@ curl -fsSL https://raw.githubusercontent.com/markabrahams/llmshot/main/install/i
 This installs `llmshot` to `~/.local/bin` (or `/usr/local/bin` if run as root). To use a custom directory:
 
 ```bash
-curl -fsSL .../install/install.sh | bash -s -- -d /usr/local/bin
+curl -fsSL https://raw.githubusercontent.com/markabrahams/llmshot/main/install/install.sh | bash -s -- -d /usr/local/bin
 # or
-INSTALL_DIR=/usr/local/bin curl -fsSL .../install/install.sh | bash
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/markabrahams/llmshot/main/install/install.sh | bash
 ```
 
 Ensure `~/.local/bin` is in your `PATH` (e.g. add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc` or `~/.profile`).
 
 ### Homebrew (macOS)
 
-If you have a [Homebrew tap](https://docs.brew.sh/Taps) that includes the formula (see `install/llmshot.rb` template in this repo):
+If you have a [Homebrew tap](https://docs.brew.sh/Taps) that includes the formula (see `scripts/llmshot.rb` template in this repo):
 
 ```bash
 brew install markabrahams/llmshot/llmshot

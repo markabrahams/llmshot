@@ -3,13 +3,16 @@
 # Maintainer script: create or update the Homebrew tap for llmshot.
 # Requires: gh (GitHub CLI), logged in. Tap dir: /var/tmp/homebrew-llmshot (override with -d/--dir).
 #
-# Create tap from scratch (one-time):
-#   ./install/brew-release.sh -c
-#   # or: ./install/brew-release.sh --create
+# Before releasing a version, tag it in the llmshot repo and push the tag (so the tarball exists on GitHub):
+#   git tag -a v1.0.0 -m "Release 1.0.0"    # or: git tag v1.0.0
+#   git push origin v1.0.0
 #
-# Release an update (bump version in tap):
-#   ./install/brew-release.sh 1.0.1
-#   # Tag v1.0.1 must exist in the llmshot repo; script updates formula and pushes tap.
+# Create tap from scratch (one-time). Pass VERSION to also set formula and push:
+#   ./scripts/brew-release.sh -c 1.0.0
+#   # or without VERSION, then run a release step later to set version/sha256 and push.
+#
+# Release an update (bump version in tap; tag vVERSION must exist). Script commits and pushes:
+#   ./scripts/brew-release.sh 1.0.1
 
 set -euo pipefail
 
@@ -21,13 +24,14 @@ usage() {
     echo "Usage: $0 [-c|--create] [-d DIR|--dir DIR] [VERSION]"
     echo "  -c, --create   Create tap from scratch (repo + clone + Formula/)."
     echo "  -d, --dir DIR  Local tap directory (default: /var/tmp/homebrew-llmshot)."
-    echo "  VERSION        Release update: set formula to VERSION (e.g. 1.0.1); tag vVERSION must exist."
+    echo "  VERSION        Set formula to VERSION and push (e.g. 1.0.1); tag vVERSION must exist. Optional after -c."
     echo ""
     echo "Env: GITHUB_OWNER  Override GitHub owner (default: from 'gh api user' or tap remote)."
     exit 0
 }
 
 create_tap() {
+    local skip_next_msg="$1"
     local owner
     owner="${GITHUB_OWNER:-$(gh api user -q .login)}"
     if [[ -z "$owner" ]]; then
@@ -44,18 +48,20 @@ create_tap() {
     gh repo create "$owner/$REPO_NAME" --public --description "Homebrew tap for llmshot" || true
 
     echo "Cloning to $TAP_DIR ..."
-    git clone "https://github.com/${owner}/${REPO_NAME}.git" "$TAP_DIR"
+    git clone "git@github.com:${owner}/${REPO_NAME}.git" "$TAP_DIR"
     mkdir -p "$TAP_DIR/Formula"
 
     local formula_src
-    formula_src="$(cd "$(dirname "$0")/.." && pwd)/install/llmshot.rb"
+    formula_src="$(cd "$(dirname "$0")" && pwd)/llmshot.rb"
     if [[ ! -f "$formula_src" ]]; then
         echo "error: formula not found at $formula_src" >&2
         exit 1
     fi
     cp "$formula_src" "$TAP_DIR/Formula/$FORMULA_NAME"
     echo "Copied formula to $TAP_DIR/Formula/$FORMULA_NAME"
-    echo "Next: edit version/sha256 in the formula, then from $TAP_DIR run git add, commit, push."
+    if [[ -z "$skip_next_msg" ]]; then
+        echo "Next: run ./scripts/brew-release.sh -d $TAP_DIR <VERSION> to set version/sha256 and push."
+    fi
 }
 
 release_update() {
@@ -99,9 +105,8 @@ release_update() {
     rm -f "${formula_path}.bak"
 
     echo "Updated $formula_path to v${version} (sha256 set)."
-    (cd "$TAP_DIR" && git add "Formula/$FORMULA_NAME" && git status)
-    echo "Commit and push from $TAP_DIR to publish:"
-    echo "  cd $TAP_DIR && git commit -m 'llmshot v${version}' && git push"
+    (cd "$TAP_DIR" && git add "Formula/$FORMULA_NAME" && git commit -m "llmshot v${version}" && git push)
+    echo "Committed and pushed to origin."
 }
 
 # --- main ---
@@ -124,7 +129,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -n "$CREATE" ]]; then
-    create_tap
+    create_tap "${VERSION:+1}"
+    if [[ -n "$VERSION" ]]; then
+        release_update "$VERSION"
+    fi
 else
     release_update "$VERSION"
 fi

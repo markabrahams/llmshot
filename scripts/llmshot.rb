@@ -3,19 +3,18 @@
 # For maintainers: steps below are for you to publish llmshot on Homebrew.
 # End users only run: brew install markabrahams/llmshot/llmshot (or --head for latest main).
 #
-# To publish (maintainer), use install/brew-release.sh (requires gh CLI, logged in):
+# To publish (maintainer), use scripts/brew-release.sh (requires gh CLI, logged in):
 #
 #   One-time — create the tap (GitHub repo + local clone + Formula/):
-#     ./install/brew-release.sh -c
+#     ./scripts/brew-release.sh -c
 #   Then run a release step below so the formula has version/sha256, and push from the tap dir.
 #
-#   Each release — tag must exist (e.g. v1.0.0). Script updates formula and prints commit/push:
-#     ./install/brew-release.sh 1.0.0
-#     cd /var/tmp/homebrew-llmshot && git commit -m 'llmshot v1.0.0' && git push
+#   Each release — tag must exist (e.g. v1.0.0). Script updates formula and pushes:
+#     ./scripts/brew-release.sh 1.0.0
 #
 #   Optional: -d DIR to use a different tap directory (default: /var/tmp/homebrew-llmshot).
 #
-#   ./install/brew-release.sh -h for usage.
+#   ./scripts/brew-release.sh -h for usage.
 
 class Llmshot < Formula
   desc "Multi-provider LLM CLI (OpenAI, Google, Anthropic, Ollama)"
