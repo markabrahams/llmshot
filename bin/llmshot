@@ -241,31 +241,33 @@ fi
 JSON_PROMPT=$(jq -n --arg text "$PROMPT" '$text')
 
 # ---------------------------
-# Call provider API
+# Call provider API (capture then printf so single quotes etc. are preserved)
 # ---------------------------
 case "$PROVIDER_LOWER" in
     openai)
-        curl -s https://api.openai.com/v1/chat/completions \
+        RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{
                 \"model\": \"$OPENAI_MODEL\",
                 \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]
-            }" | jq -r '.choices[0].message.content'
+            }" | jq -r '.choices[0].message.content')
+        printf '%s\n' "$RESPONSE"
         ;;
     anthropic)
-        curl -s https://api.anthropic.com/v1/chat/completions \
+        RESPONSE=$(curl -s https://api.anthropic.com/v1/chat/completions \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "Anthropic-Version: 2023-06-01" \
             -H "Content-Type: application/json" \
             -d "{
                 \"model\": \"$ANTHROPIC_MODEL\",
                 \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}]
-            }" | jq -r '.choices[0].message.content'
+            }" | jq -r '.choices[0].message.content')
+        printf '%s\n' "$RESPONSE"
         ;;
     google)
         # Google expects contents.parts[].text
-        curl -s "https://generativelanguage.googleapis.com/v1beta/models/$GOOGLE_MODEL:generateContent" \
+        RESPONSE=$(curl -s "https://generativelanguage.googleapis.com/v1beta/models/$GOOGLE_MODEL:generateContent" \
             -H "x-goog-api-key: $GOOGLE_API_KEY" \
             -H "Content-Type: application/json" \
             -X POST \
@@ -273,17 +275,19 @@ case "$PROVIDER_LOWER" in
                 \"contents\": [
                     {\"parts\": [{\"text\": $JSON_PROMPT}]}
                 ],
-            }" | jq -r '.candidates[0].content.parts[0].text'
+            }" | jq -r '.candidates[0].content.parts[0].text')
+        printf '%s\n' "$RESPONSE"
         ;;
     ollama)
-        curl -s "${OLLAMA_URL%/}/api/chat" \
+        RESPONSE=$(curl -s "${OLLAMA_URL%/}/api/chat" \
             -H "Content-Type: application/json" \
             -X POST \
             -d "{
                 \"model\": \"$OLLAMA_MODEL\",
                 \"messages\": [{\"role\": \"user\", \"content\": $JSON_PROMPT}],
                 \"stream\": false
-            }" | jq -r '.message.content'
+            }" | jq -r '.message.content')
+        printf '%s\n' "$RESPONSE"
         ;;
     *)
         die "Unknown provider: $PROVIDER"
