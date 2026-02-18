@@ -287,4 +287,4 @@ and Anthropic. This project is not affiliated with or endorsed by any
 of these providers. Users are responsible for complying with the respective
 API terms of service.
 
-![ShellCheck](https://github.com/YOURNAME/llmshot/actions/workflows/shellcheck.yml/badge.svg)
+![ShellCheck](https://github.com/markabrahams/llmshot/actions/workflows/shellcheck.yml/badge.svg)
